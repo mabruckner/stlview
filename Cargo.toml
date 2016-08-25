@@ -1,0 +1,10 @@
+[package]
+name = "stlview"
+version = "0.1.0"
+authors = ["Mitchell Bruckner <mbruckner807@gmail.com>"]
+
+[dependencies]
+starfield-render = { git = "https://github.com/mabruckner/starfield-render.git", rev = "fe7ec3a" }
+stl =  { git = "https://github.com/mabruckner/rust-stl.git", rev = "e9526f3"}
+clap = "2.10.2"
+nalgebra = "0.8.2"
