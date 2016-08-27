@@ -9,10 +9,11 @@ use starfield_render as sf;
 use clap::{App, Arg};
 use nalgebra::{Vector3, Vector4, Rotation3, Rotation, Rotate};
 use std::f32;
+use std::f32::consts::PI;
 
 fn print_mat(buf: &sf::Buffer<sf::Pixel>)
 {
-    for y in 0..buf.height {
+    for y in (0..buf.height).rev() {
         for x in 0..buf.width {
             match buf.get((x,y)) {
                 &Some((ref col, _)) => print!("\x1B[48;5;{}m ", sf::to_256_color(col, x, y)),
@@ -23,22 +24,61 @@ fn print_mat(buf: &sf::Buffer<sf::Pixel>)
     }
 }
 
-
+enum Mode {
+    Static,
+    Rotation
+}
 
 fn main() {
     let matches = App::new("stlview")
                         .about("Displays stl files to the terminal.")
                         .arg(Arg::with_name("file")
-                             .required(true))
+                             .required(true)
+                             .value_name("FILE")
+                             .help("The path to the stl file to display"))
                         .arg(Arg::with_name("width")
                              .short("w")
-                             .long("width"))
+                             .long("width")
+                             .value_name("WIDTH")
+                             .help("The width of the viewport in characters."))
                         .arg(Arg::with_name("height")
                              .short("h")
-                             .long("height"))
+                             .long("height")
+                             .value_name("HEIGHT")
+                             .help("The height of the viewport in characters. (1/2 of width is usually a good bet)"))
+                        .arg(Arg::with_name("up")
+                             .short("u")
+                             .long("up")
+                             .value_name("DIRECTION")
+                             .help("Axis to use as 'up' direction. Defaults to z."))
+                        .arg(Arg::with_name("mode")
+                             .short("m")
+                             .long("mode")
+                             .value_name("MODE")
+                             .help("One of static (short form s) or rotation (r). static simply prints the render, while rotation animates."))
                         .get_matches();
+
     let filename = matches.value_of("file").unwrap();
     let (width, height) = (100, 50);
+    let width = match matches.value_of("width") {
+        Some(w) => w.parse::<usize>().unwrap_or(width),
+        None => width
+    };
+    let height = match matches.value_of("height") {
+        Some(h) => h.parse::<usize>().unwrap_or(height),
+        None => height
+    };
+    let rotation = match matches.value_of("up") {
+        Some("x") => Rotation3::new(Vector3::new(0.0, 0.0, -PI / 2.0)),
+        Some("y") => Rotation3::new(Vector3::new(0.0, 0.0, 0.0)),
+        Some("z") => Rotation3::new(Vector3::new(-PI / 2.0, 0.0, 0.0)),
+        _ => Rotation3::new(Vector3::new(-PI / 2.0, 0.0, 0.0))
+    };
+    let mode = match matches.value_of("mode") {
+        Some("s") | Some("static") => Mode::Static,
+        Some("r") | Some("rotation") => Mode::Rotation,
+        _ => Mode::Static
+    };
 
     let mut stlfile = File::open(Path::new(filename)).expect("error while opening stl file");
     let binfile = stl::read_stl(&mut stlfile).unwrap();
@@ -75,6 +115,8 @@ fn main() {
 
     let verts = verts.into_iter().map(|(p,n)| {
         (2.0*l.recip()*(Vector3::new(p[0], p[1], p[2])-c), Vector3::new(n[0], n[1], n[2]))
+    }).map(|(p, n)| {
+        (rotation.rotate(&p), rotation.rotate(&n))
     }).collect();
 
     let vertex = move |rot: &Rotation3<f32>, &(p, n): &(Vector3<f32>, Vector3<f32>)| {
@@ -89,11 +131,18 @@ fn main() {
 
     let mut buf = sf::Buffer::new(width, height);
     let mut rot = Rotation3::new(Vector3::new(0.0,0.0,0.0));
-    loop {
-        rot.append_rotation_mut(&Vector3::new(0.0,0.05,0.0));
-        buf.clear();
-        sf::process(&mut buf, &rot, &verts, &faces, &vertex, &fragment);
-        print_mat(&buf);
-        println!("\x1B[{}A", height+1);
+    match mode {
+        Mode::Rotation => loop {
+            rot.append_rotation_mut(&Vector3::new(0.0,0.05,0.0));
+            buf.clear();
+            sf::process(&mut buf, &rot, &verts, &faces, &vertex, &fragment);
+            print_mat(&buf);
+            println!("\x1B[{}A", height+1);
+        },
+        Mode::Static => {
+            buf.clear();
+            sf::process(&mut buf, &rot, &verts, &faces, &vertex, &fragment);
+            print_mat(&buf);
+        }
     }
 }
