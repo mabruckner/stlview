@@ -2,25 +2,44 @@ extern crate starfield_render;
 extern crate clap;
 extern crate stl;
 extern crate nalgebra;
+#[cfg(feature="termite")]
+extern crate termite;
 
 use std::fs::File;
 use std::path::Path;
 use starfield_render as sf;
 use clap::{App, Arg};
 use nalgebra::{Vector3, Vector4, Rotation3, Rotation, Rotate};
+use std::io::{Write,stdout};
 use std::f32;
 use std::f32::consts::PI;
 
-fn print_mat(buf: &sf::Buffer<sf::Pixel>)
+#[cfg(feature="termite")]
+fn get_defaults() -> (usize, usize, f32)
+{
+    let (width, height) = termite::get_term_dims();
+    let char_aspect = termite::char_aspect();
+    (width, height, char_aspect)
+}
+
+#[cfg(not(feature="termite"))]
+fn get_defaults() -> (usize, usize, f32)
+{
+    (40, 20, 0.5)
+}
+
+fn print_mat(buf: &sf::DepthBuffer<sf::Pixel>)
 {
     for y in (0..buf.height).rev() {
         for x in 0..buf.width {
-            match buf.get((x,y)) {
+            match buf.get(x,y) {
                 &Some((ref col, _)) => print!("\x1B[48;5;{}m ", sf::to_256_color(col, x, y)),
                 &None => print!("\x1B[48;5;0m ")
             }
         }
-        println!("");
+        if y != 0 {
+            println!("");
+        }
     }
 }
 
@@ -59,7 +78,14 @@ fn main() {
                         .get_matches();
 
     let filename = matches.value_of("file").unwrap();
-    let (width, height) = (100, 50);
+
+    let (width, height, char_aspect) = get_defaults();
+
+    let (width, height) = if width as f32 > height as f32 * char_aspect{
+        ((height as f32 / char_aspect) as usize, height)
+    } else {
+        (width, (width as f32 * char_aspect) as usize)
+    };
     let width = match matches.value_of("width") {
         Some(w) => w.parse::<usize>().unwrap_or(width),
         None => width
@@ -125,11 +151,11 @@ fn main() {
         (Vector4::new(rp.x, rp.y, rp.z, 1.0), (rn.z+rn.x)/1.4)
     };
 
-    let fragment = |u: &Rotation3<f32>, v: &f32| {
+    let fragment = |_: &Rotation3<f32>, v: &f32| {
         Some(sf::Pixel::Grayscale(v.max(0.0)))
     };
 
-    let mut buf = sf::Buffer::new(width, height);
+    let mut buf = sf::Buffer::new(width, height, None);
     let mut rot = Rotation3::new(Vector3::new(0.0,0.0,0.0));
     match mode {
         Mode::Rotation => loop {
@@ -137,7 +163,8 @@ fn main() {
             buf.clear();
             sf::process(&mut buf, &rot, &verts, &faces, &vertex, &fragment);
             print_mat(&buf);
-            println!("\x1B[{}A", height+1);
+            print!("\x1B[{}A\x1B[1G", height - 1);
+            stdout().flush().unwrap();
         },
         Mode::Static => {
             buf.clear();
