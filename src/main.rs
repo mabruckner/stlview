@@ -1,6 +1,8 @@
+#[macro_use]
+extern crate nom;
+
 extern crate starfield_render;
 extern crate clap;
-extern crate stl;
 extern crate nalgebra;
 #[cfg(feature="termite")]
 extern crate termite;
@@ -13,6 +15,9 @@ use nalgebra::{Vector3, Vector4, Rotation3, Rotation, Rotate};
 use std::io::{Write,stdout};
 use std::f32;
 use std::f32::consts::PI;
+use std::io::Read;
+
+mod stl;
 
 #[cfg(feature="termite")]
 fn get_defaults() -> (usize, usize, f32)
@@ -46,6 +51,22 @@ fn print_mat(buf: &sf::DepthBuffer<sf::Pixel>)
 enum Mode {
     Static,
     Rotation
+}
+
+fn compute_normal(face: &[[f32; 3]; 3]) -> [f32; 3] {
+    let mut out = [0.0; 3];
+    let mut l = 0.0;
+    for i in 0..3 {
+        let a = (i+1)%3;
+        let b = (i+2)%3;
+        out[i] = (face[1][a]-face[0][a])*(face[2][b]-face[0][b]) - (face[1][b]-face[0][b])*(face[2][a]-face[0][a]);
+        l = l+out[i]*out[i];
+    }
+    l = l.sqrt();
+    for i in 0..3 {
+        out[i] = out[i]/l;
+    }
+    out
 }
 
 fn main() {
@@ -107,16 +128,19 @@ fn main() {
     };
 
     let mut stlfile = File::open(Path::new(filename)).expect("error while opening stl file");
-    let binfile = stl::read_stl(&mut stlfile).unwrap();
+    let mut buf = Vec::new();
+    stlfile.read_to_end(&mut buf);
+    let binfile = stl::from_ascii(&buf).unwrap();
 
     let mut verts = Vec::new();
     let mut faces = Vec::new();
-    for x in binfile.triangles {
+    for x in binfile {
         let n = verts.len();
+        let normal = compute_normal(&x);
         faces.push(sf::Patch::Tri(n, n+1, n+2));
-        verts.push((x.v1, x.normal));
-        verts.push((x.v2, x.normal));
-        verts.push((x.v3, x.normal));
+        verts.push((x[0], normal));
+        verts.push((x[1], normal));
+        verts.push((x[2], normal));
     }
 
     let mi = verts.iter().fold([f32::MAX; 3], |mut thing, val| {
