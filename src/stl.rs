@@ -50,3 +50,19 @@ pub fn read_stl(data: &[u8]) -> Option<Solid> {
         None => from_bin(data)
     }
 }
+
+pub fn compute_normal(face: &[[f32; 3]; 3]) -> [f32; 3] {
+    let mut out = [0.0; 3];
+    let mut l = 0.0;
+    for i in 0..3 {
+        let a = (i+1)%3;
+        let b = (i+2)%3;
+        out[i] = (face[1][a]-face[0][a])*(face[2][b]-face[0][b]) - (face[1][b]-face[0][b])*(face[2][a]-face[0][a]);
+        l = l+out[i]*out[i];
+    }
+    l = l.sqrt();
+    for i in 0..3 {
+        out[i] = out[i]/l;
+    }
+    out
+}
