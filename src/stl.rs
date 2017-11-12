@@ -25,7 +25,7 @@ named!(vert_text<&[u8], Vertex>, map!(ws!(preceded!(tag!("vertex"), tuple!(float
 
 named!(tri_text<&[u8], Triangle>, map!(ws!(do_parse!(tag!("facet") >> tag!("normal") >> float >> float >> float >> tag!("outer") >> tag!("loop") >> a:vert_text >> b:vert_text >> c:vert_text >> tag!("endloop") >> tag!("endfacet") >> (a, b, c))), |(a,b,c)|{ [a,b,c]}));
 
-named!(solid_text<&[u8], Solid>, ws!(do_parse!(tag!("solid") >> name: is_not!("\r\n") >> tris: many0!(tri_text) >> tag!("endsolid") >> tag!(name) >> (tris))));
+named!(solid_text<&[u8], Solid>, alt!(ws!(do_parse!(tag!("solid") >> tris: many0!(tri_text) >> tag!("endsolid") >> (tris))) | ws!(do_parse!(tag!("solid") >> name: is_not!("\r\n") >> tris: many0!(tri_text) >> tag!("endsolid") >> tag!(name) >> (tris)))));
 
 pub fn from_ascii(text: &[u8]) -> Option<Solid> {
     match solid_text(text) {
